@@ -96,7 +96,7 @@ class MyMeter:
         else:
             time_diff = timedelta(minutes=15)
         # Unit of measure
-        unit_of_measurement = reads.get("tooltip").get("valueSuffix")
+        unit_of_measurement = reads.get("tooltip").get("valueSuffix").strip()
         # Loop over data
         for data in data_series:
             s = data.get("x")
