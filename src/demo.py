@@ -52,7 +52,7 @@ async def main() -> None:
                 print(result)
             print("Total Results:", len(results))
         if filename:
-            await mymeter.print_data(start_time, end_time, filename)
+            await mymeter.print_data(start_time, filename, end_time)
 
 
 asyncio.run(main())
