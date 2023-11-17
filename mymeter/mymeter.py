@@ -75,9 +75,10 @@ class MyMeter:
         resp = await self.session.post(login_url, data=login_data)
         if txt := await resp.text():
             json_txt = json.loads(txt)
-            error_msg = json_txt.get("Data").get("LoginErrorMessage")
-            if error_msg:
-                raise InvalidAuth
+            if json_txt.get("Data") is not None:
+                error_msg = json_txt.get("Data").get("LoginErrorMessage")
+                if error_msg:
+                    raise InvalidAuth
 
     async def async_login(self) -> None:
         await self._async_login()
