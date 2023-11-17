@@ -6,7 +6,7 @@ import aiohttp
 
 from bs4 import BeautifulSoup, Tag
 
-from .exceptions import DataException
+from .exceptions import DataException, InvalidAuth, TokenErrorException
 
 
 @dataclasses.dataclass
@@ -69,8 +69,15 @@ class MyMeter:
         if token:
             login_data["__RequestVerificationToken"] = token
             self.token = token
+        else:
+            raise TokenErrorException
 
-        await self.session.post(login_url, data=login_data)
+        resp = await self.session.post(login_url, data=login_data)
+        if txt := await resp.text():
+            json_txt = json.loads(txt)
+            error_msg = json_txt.get("Data").get("LoginErrorMessage")
+            if error_msg:
+                raise InvalidAuth
 
     async def async_login(self) -> None:
         await self._async_login()
