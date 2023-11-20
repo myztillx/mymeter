@@ -46,13 +46,32 @@ async def main() -> None:
     async with aiohttp.ClientSession() as session:
         mymeter = MyMeter(session, username, password)
         await mymeter.async_login()
-        results = await mymeter.async_get_usage_reads(start_time, end_time)
-        if results:
-            for result in results:
+        # Test Usage Reads
+        usage_results = await mymeter.async_get_usage_reads(start_time, end_time)
+        if usage_results:
+            for result in usage_results:
                 print(result)
-            print("Total Results:", len(results))
+            print("Total Usage Results:", len(usage_results))
         if filename:
-            await mymeter.print_data(start_time, filename, end_time)
+            await mymeter.print_data(
+                start_date=start_time,
+                filename=f"{filename}-consumption",
+                end_date=end_time,
+                cost_or_consumption="consumption",
+            )
+        # Test Cost Reads
+        cost_results = await mymeter.async_get_cost_reads(start_time, end_time)
+        if cost_results:
+            for result in cost_results:
+                print(result)
+            print("Total Cost Results:", len(cost_results))
+        if filename:
+            await mymeter.print_data(
+                start_date=start_time,
+                filename=f"{filename}-cost",
+                end_date=end_time,
+                cost_or_consumption="cost",
+            )
 
 
 asyncio.run(main())
