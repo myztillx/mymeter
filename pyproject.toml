@@ -1,6 +1,6 @@
 [project]
 name = "mymeter"
-version = "0.0.4"
+version = "0.0.5"
 license = { file = "LICENSE" }
 authors = [{ name = "Samuel Geist", email = "samuel.geist@gmail.com" }]
 description = "A python library for getting historical utilities usage for mymeter."
