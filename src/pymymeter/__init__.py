@@ -1,5 +1,5 @@
 from .exceptions import DataException, InvalidAuth, TokenErrorException
-from .mymeter import CostRead, MyMeter, UsageInterval, UsageRead, UsageType
+from .pymymeter import CostRead, MyMeter, UsageInterval, UsageRead, UsageType
 
 __all__ = [
     "CostRead",

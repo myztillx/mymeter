@@ -4,7 +4,7 @@ import aiohttp
 from datetime import datetime, timedelta
 from getpass import getpass
 
-from mymeter.mymeter import MyMeter
+from pymymeter.pymymeter import MyMeter
 
 
 async def main() -> None:
