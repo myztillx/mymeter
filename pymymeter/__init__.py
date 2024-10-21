@@ -2,7 +2,7 @@
 
 from .const import CostRead, UsageInterval, UsageRead, UsageType
 from .exceptions import DataException, InvalidAuth, TokenErrorException
-from .mymeter import MyMeter
+from .pymymeter import MyMeter
 
 __all__ = [
     "CostRead",
