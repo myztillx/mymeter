@@ -1,11 +1,11 @@
 """Retreive data from mymeter."""
 
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any, Optional
 
 import aiohttp
-from bs4 import BeautifulSoup, Tag
 
 from .const import CostRead, UsageInterval, UsageRead, UsageType
 from .exceptions import DataException, InvalidAuth, TokenErrorException
@@ -30,12 +30,16 @@ class MyMeter:
         url = "https://mymeter.lge-ku.com/"
         async with self.session.get(url) as response:
             text = await response.text()
-        soup = BeautifulSoup(text, "html.parser")
-        input_element = soup.find("input", {"name": "__RequestVerificationToken"})
-        if isinstance(input_element, Tag):
-            token = input_element.get("value", None)
-            if isinstance(token, str):
-                return token
+        # Use regular expressions to find the input element
+        # This is a hidden input field with the name `__RequestVerificationToken`.
+        # Get the `value` field on this hidden input.
+        token_regex = (
+            r"<input[^>]*name=\"__RequestVerificationToken\"[^>]*value=\"(.*?)\""
+        )
+        match = re.search(token_regex, text, flags=re.DOTALL)
+        if match:
+            return match.group(1)
+
         return None
 
     async def _async_set_chart_data(

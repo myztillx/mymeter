@@ -6,7 +6,7 @@ authors = [{ name = "Samuel Geist", email = "samuel.geist@gmail.com" }]
 description = "A python library for getting historical utilities usage for mymeter."
 readme = "README.md"
 requires-python = ">=3.9"
-dependencies = ["aiohttp>=3.8", "beautifulsoup4>=4.12"]
+dependencies = ["aiohttp>=3.8"]
 
 [project.urls]
 "Homepage" = "https://github.com/myztillx/mymeter"
