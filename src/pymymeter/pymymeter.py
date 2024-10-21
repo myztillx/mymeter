@@ -1,55 +1,30 @@
-import dataclasses
-from datetime import datetime, timedelta
-import json
-from typing import Literal, Optional, Any
-import aiohttp
+"""Retreive data from mymeter."""
 
+import json
+from datetime import datetime, timezone
+from typing import Any, Optional
+
+import aiohttp
 from bs4 import BeautifulSoup, Tag
 
+from .const import CostRead, UsageInterval, UsageRead, UsageType
 from .exceptions import DataException, InvalidAuth, TokenErrorException
-
-
-@dataclasses.dataclass
-class UsageRead:
-    start_time: datetime
-    end_time: datetime
-    consumption: float
-    unit_of_measurement: str
-
-
-@dataclasses.dataclass
-class CostRead:
-    start_time: datetime
-    end_time: datetime
-    provided_cost: float
-
-
-UsageInterval = Literal["15minute", "30minute", "day", "hour", "week", "month", "bill"]
-UsageType = Literal["cost", "consumption"]
-
-
-update_interval_dict: dict[UsageInterval, str] = {
-    "15minute": "3",
-    "30minute": "4",
-    "hour": "5",
-    "day": "6",
-    "week": "8",
-    "bill": "7",
-    "month": "9",
-}
-
-usage_type_dict: dict[UsageType, "str"] = {"cost": "3", "consumption": "1"}
 
 
 class MyMeter:
     """Class that can get historical data from utility."""
 
     def __init__(
-        self, session: aiohttp.ClientSession, username: str, password: str
+        self,
+        session: aiohttp.ClientSession,
+        username: str,
+        password: str,
+        usage_interval: UsageInterval = UsageInterval.HOUR,
     ) -> None:
         self.session: aiohttp.ClientSession = session
         self.username: str = username
         self.password: str = password
+        self.usage_interval: UsageInterval = usage_interval
 
     async def _async_get_verification_token(self) -> str | None:
         url = "https://mymeter.lge-ku.com/"
@@ -57,26 +32,24 @@ class MyMeter:
             text = await response.text()
         soup = BeautifulSoup(text, "html.parser")
         input_element = soup.find("input", {"name": "__RequestVerificationToken"})
-        if type(input_element) is Tag:
+        if isinstance(input_element, Tag):
             token = input_element.get("value", None)
-            if type(token) is str:
+            if isinstance(token, str):
                 return token
+        return None
 
     async def _async_set_chart_data(
         self,
-        usage_interval: UsageInterval = "hour",
-        usage_type: UsageType = "consumption",
-    ):
-        interval = update_interval_dict[usage_interval]
-        type = usage_type_dict[usage_type]
+        usage_type: UsageType = UsageType.CONSUMPTION,
+    ) -> str:
         token = await self._async_get_verification_token()
 
         url = "https://mymeter.lge-ku.com/Dashboard/Chart/"
         data = {}
         data["__RequestVerificationToken"] = token
 
-        data["UsageInterval"] = interval
-        data["UsageType"] = type
+        data["UsageInterval"] = self.usage_interval
+        data["UsageType"] = usage_type
         data["jsTargetName"] = "StorageType"
         data["EnableHoverChart"] = "true"
         data["Start"] = "2023-11-01"
@@ -112,6 +85,7 @@ class MyMeter:
                     raise InvalidAuth
 
     async def async_login(self) -> None:
+        """Login to site."""
         await self._async_login()
         # await self._async_set_chart_data()
 
@@ -120,27 +94,37 @@ class MyMeter:
             return await response.text()
 
     async def async_get_usage_reads(
-        self, start_date: datetime, end_date: Optional[datetime] = None
+        self,
+        start_date: datetime,
+        end_date: Optional[datetime] = None,
     ) -> list[UsageRead] | None:
         """Return Usage Reads."""
-        reads = await self._async_get_dated_data(start_date, end_date, "consumption")
+        reads = await self._async_get_dated_data(
+            start_date=start_date,
+            end_date=end_date,
+            cost_or_consumption=UsageType.CONSUMPTION,
+        )
         if not reads:
             raise DataException("No usage data returned.")
         data_series = reads.get("data", [])
-        result: list[UsageRead] = []
         # Calculate the time diff
         if len(data_series) > 2:
-            t1 = datetime.utcfromtimestamp(data_series[0].get("x") / 1000)
-            t2 = datetime.utcfromtimestamp(data_series[1].get("x") / 1000)
+            t1 = datetime.fromtimestamp(data_series[0].get("x") / 1000, tz=timezone.utc)
+            t2 = datetime.fromtimestamp(data_series[1].get("x") / 1000, tz=timezone.utc)
             time_diff = t2 - t1
         else:
-            time_diff = timedelta(minutes=60)
+            time_diff = self.usage_interval.to_timedelta()
+
         # Unit of measure
         unit_of_measurement = reads.get("tooltip").get("valueSuffix").strip()
+
         # Loop over data
+        result: list[UsageRead] = []
         for data in data_series:
             s = data.get("x")
-            start_time = datetime.utcfromtimestamp(s / 1000)
+            start_time = datetime.fromtimestamp(s / 1000, tz=timezone.utc).replace(
+                tzinfo=None
+            )
             end_time = start_time + time_diff
             consumption = data.get("y")
             result.append(
@@ -158,23 +142,27 @@ class MyMeter:
     ) -> list[CostRead] | None:
         """Return Cost Reads."""
         reads = await self._async_get_dated_data(
-            start_date=start_state, end_date=end_date, cost_or_consumption="cost"
+            start_date=start_state,
+            end_date=end_date,
+            cost_or_consumption=UsageType.COST,
         )
         if not reads:
             raise DataException("No cost data returned.")
         data_series = reads.get("data", [])
-        result: list[CostRead] = []
         if len(data_series) > 2:
-            t1 = datetime.utcfromtimestamp(data_series[0].get("x") / 1000)
-            t2 = datetime.utcfromtimestamp(data_series[1].get("x") / 1000)
+            t1 = datetime.fromtimestamp(data_series[0].get("x") / 1000, tz=timezone.utc)
+            t2 = datetime.fromtimestamp(data_series[1].get("x") / 1000, tz=timezone.utc)
             time_diff = t2 - t1
         else:
-            time_diff = timedelta(minutes=60)
+            time_diff = self.usage_interval.to_timedelta()
 
         # Loop over data
+        result: list[CostRead] = []
         for data in data_series:
             s = data.get("x")
-            start_time = datetime.utcfromtimestamp(s / 1000)
+            start_time = datetime.fromtimestamp(s / 1000, tz=timezone.utc).replace(
+                tzinfo=None
+            )
             end_time = start_time + time_diff
             cost = data.get("y")
             result.append(
@@ -190,26 +178,26 @@ class MyMeter:
         self,
         start_date: datetime,
         end_date: Optional[datetime] = None,
-        cost_or_consumption: UsageType = "consumption",
+        cost_or_consumption: UsageType = UsageType.CONSUMPTION,
         print_data: bool = False,
     ) -> Any | None:
         """Gets data between two dates."""
         # Set start and end times.
         start = int(start_date.timestamp() * 1000)
-        if end_date:
-            end = int(end_date.timestamp() * 1000)
-        else:
-            end = int(datetime.now().timestamp() * 1000)
+        end = int((end_date or datetime.now()).timestamp() * 1000)
 
         # Set chart type (cost or consumption)
         await self._async_set_chart_data(usage_type=cost_or_consumption)
 
-        data_url = f"https://mymeter.lge-ku.com/Dashboard/ChartData?_=1&unixTimeStart={start}&unixTimeEnd={end}"
+        data_url = (
+            "https://mymeter.lge-ku.com/Dashboard/ChartData?"
+            + f"_=1&unixTimeStart={start}&unixTimeEnd={end}"
+        )
         data = json.loads(await self._fetch_page(data_url))
         if print_data:
             return data
         series_data_list = data.get("Data").get("series")
-        # Filter out to only get the data desired.
+        # Return only the desired series_data.
         for series_data in series_data_list:
             if series_data.get("name"):
                 data_series = series_data.get("data", [])
@@ -222,13 +210,16 @@ class MyMeter:
                 if len(data_series) > 1 and y_data > 0 and not tr_data:
                     return series_data
 
+        return None
+
     async def print_data(
         self,
         start_date: datetime,
         filename: str = "meter_data",
         end_date: Optional[datetime] = None,
-        cost_or_consumption: UsageType = "consumption",
+        cost_or_consumption: UsageType = UsageType.CONSUMPTION,
     ) -> None:
+        """Print data to file."""
         data = await self._async_get_dated_data(
             start_date=start_date,
             end_date=end_date,
@@ -239,5 +230,5 @@ class MyMeter:
             filename = filename.split(".")[0]
         full_filename = f"{filename}.json"
         if data:
-            with open(full_filename, "w") as f:
+            with open(full_filename, "w", encoding="utf-8") as f:
                 f.write(json.dumps(data))
